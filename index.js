@@ -1,8 +1,8 @@
 const express = require('express');
+const mysql = require('mysql2');
 const bodyParser = require('body-parser');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const mysql = require('mysql2/promise'); // Import mysql2 promise-based version
 const dotenv = require('dotenv');
 
 dotenv.config();
@@ -12,31 +12,32 @@ const port = process.env.PORT || 3000;
 
 app.use(bodyParser.json());
 
-// Create a MySQL connection pool
-const db = mysql.createPool({
+const db = mysql.createConnection({
     host: process.env.MYSQL_HOST,
     port: process.env.MYSQL_PORT,
     user: process.env.MYSQL_USER,
     password: process.env.MYSQL_PASSWORD,
-    database: process.env.MYSQL_DATABASE,
-    waitForConnections: true,
-    connectionLimit: 10, // Adjust this value as needed
-    queueLimit: 0,
+    database: process.env.MYSQL_DATABASE
+});
+
+db.connect((err) => {
+    if (err) {
+        console.error('Error connecting to MySQL: ' + err.message);
+        return;
+    }
+    console.log('Connected to MySQL');
 });
 
 // Registration Route
-app.post('/api/register', async (req, res) => {
+app.post('/register', async (req, res) => {
     const { username, password } = req.body;
 
     try {
-        const connection = await db.getConnection();
-
         // Check if the username already exists in the database
         const checkUsernameQuery = 'SELECT * FROM users WHERE username = ?';
-        const [existingUser] = await connection.query(checkUsernameQuery, [username]);
+        const [existingUser] = await db.promise().query(checkUsernameQuery, [username]);
 
         if (existingUser.length > 0) {
-            connection.release();
             return res.status(400).json({ message: 'Username already exists' });
         }
 
@@ -45,9 +46,7 @@ app.post('/api/register', async (req, res) => {
 
         // Insert the user into the database
         const createUserQuery = 'INSERT INTO users (username, password) VALUES (?, ?)';
-        await connection.query(createUserQuery, [username, hashedPassword]);
-
-        connection.release();
+        await db.promise().query(createUserQuery, [username, hashedPassword]);
 
         res.status(201).json({ message: 'User registered successfully' });
     } catch (error) {
@@ -57,18 +56,15 @@ app.post('/api/register', async (req, res) => {
 });
 
 // Login Route
-app.post('/api/login', async (req, res) => {
+app.post('/login', async (req, res) => {
     const { username, password } = req.body;
 
     try {
-        const connection = await db.getConnection();
-
         // Check if the username exists in the database
         const getUserQuery = 'SELECT * FROM users WHERE username = ?';
-        const [users] = await connection.query(getUserQuery, [username]);
+        const [users] = await db.promise().query(getUserQuery, [username]);
 
         if (users.length === 0) {
-            connection.release();
             return res.status(401).json({ message: 'Invalid credentials' });
         }
 
@@ -76,8 +72,6 @@ app.post('/api/login', async (req, res) => {
 
         // Compare the provided password with the hashed password in the database
         const passwordMatch = await bcrypt.compare(password, user.password);
-
-        connection.release();
 
         if (!passwordMatch) {
             return res.status(401).json({ message: 'Invalid credentials' });
@@ -96,7 +90,7 @@ app.post('/api/login', async (req, res) => {
 });
 
 // Protected Route for Fetching User Profile
-app.get('/api/profile', authenticateToken, (req, res) => {
+app.get('/profile', authenticateToken, (req, res) => {
     // The user object is attached to the request object by the authenticateToken middleware
     const { userId, username } = req.user;
 
@@ -106,6 +100,9 @@ app.get('/api/profile', authenticateToken, (req, res) => {
     res.status(200).json({ userId, username });
 });
 
+app.get('/', (req, res) => {
+    res.send("Welcome to my page!");
+});
 // Middleware to authenticate JWT token
 function authenticateToken(req, res, next) {
     const token = req.header('Authorization');
@@ -117,10 +114,6 @@ function authenticateToken(req, res, next) {
         next();
     });
 }
-
-app.get('/api/welcome', (req, res) => {
-    res.send('Welcome to my page!');
-});
 
 app.listen(port, () => {
     console.log(`Server is running on port ${port}`);
