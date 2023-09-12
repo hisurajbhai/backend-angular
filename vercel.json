@@ -1,0 +1,26 @@
+{
+    "version": 2,
+    "builds": [
+        {
+            "src": "index.js",
+            "use": "@vercel/node"
+        }
+    ],
+    "routes": [
+        {
+            "src": "/api/(.*)",
+            "dest": "/api"
+        },
+        {
+            "src": "/(.*)",
+            "dest": "/"
+        }
+    ],
+    "env": {
+        "MYSQL_HOST": "containers-us-west-53.railway.app",
+        "MYSQL_PORT": "5574",
+        "MYSQL_USER": "root",
+        "MYSQL_PASSWORD": "K9fhbcIMjUrwe1OM8Ysu",
+        "MYSQL_DATABASE": "railway"
+    }
+}
